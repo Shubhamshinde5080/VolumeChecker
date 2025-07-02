@@ -3,25 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bitcoin Volume Chart</title>
+<title>Bitcoin Market Charts</title>
 <style>
   body {
     font-family: Arial, sans-serif;
     margin: 20px;
     text-align: center;
   }
-  #volumeChart {
+  canvas {
     max-width: 800px;
     width: 100%;
     height: 400px;
-    margin: auto;
+    margin: 0 auto 20px;
   }
   #loading {
     font-size: 1.2em;
     margin-top: 20px;
   }
   @media (max-width: 600px) {
-    #volumeChart {
+    canvas {
       height: 300px;
     }
   }
@@ -29,55 +29,96 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-<h1>Bitcoin Volume (Last 24h)</h1>
+<h1>Bitcoin Volume & Price (Last 24h)</h1>
 <canvas id="volumeChart"></canvas>
+<canvas id="priceChart"></canvas>
 <div id="loading">Loading…</div>
+<div id="error" style="display:none;color:red;">Failed to load data</div>
 <script>
-  (function() {
-    const now = Math.floor(Date.now() / 1000);
-    const start = now - 24 * 3600;
-    const url = `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range?vs_currency=usd&from=${start}&to=${now}`;
+(function() {
+  const now = Math.floor(Date.now() / 1000);
+  const start = now - 24 * 3600;
+  const base = 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range';
+  const params = `?vs_currency=usd&from=${start}&to=${now}`;
+  const volUrl = base + params;
+  const priceUrl = base + params;
 
-    fetch(url)
-      .then(res => res.json())
-      .then(data => {
-        const volumes = data.total_volumes || [];
-        const points = [];
-        let last = 0;
-        for (const [ts, vol] of volumes) {
-          if (ts - last >= 900000) {
-            const time = new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-            points.push({ time, vol });
-            last = ts;
+  function formatTime(ts) {
+    const d = new Date(ts);
+    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  }
+
+  Promise.all([fetch(volUrl), fetch(priceUrl)])
+    .then(responses => Promise.all(responses.map(r => r.json())))
+    .then(([volData, priceData]) => {
+      const volumes = volData.total_volumes || [];
+      const prices = priceData.prices || [];
+      const volPoints = [];
+      const pricePoints = [];
+      let last = 0;
+      for (const [ts, vol] of volumes) {
+        if (ts - last >= 900000) {
+          volPoints.push({ time: formatTime(ts), value: vol });
+          last = ts;
+        }
+      }
+      last = 0;
+      for (const [ts, price] of prices) {
+        if (ts - last >= 900000) {
+          pricePoints.push({ time: formatTime(ts), value: price });
+          last = ts;
+        }
+      }
+      document.getElementById('loading').style.display = 'none';
+      new Chart(document.getElementById('volumeChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: volPoints.map(p => p.time),
+          datasets: [{
+            label: 'Volume',
+            data: volPoints.map(p => p.value),
+            backgroundColor: 'rgba(75, 192, 192, 0.5)'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { maxTicksLimit: 15 } },
+            y: { beginAtZero: true }
           }
         }
-        document.getElementById('loading').style.display = 'none';
-        new Chart(document.getElementById('volumeChart'), {
-          type: 'bar',
-          data: {
-            labels: points.map(p => p.time),
-            datasets: [{
-              label: 'Volume',
-              data: points.map(p => p.vol),
-              backgroundColor: 'rgba(75, 192, 192, 0.5)'
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              x: { ticks: { maxTicksLimit: 15 } },
-              y: { beginAtZero: true }
-            }
-          }
-        });
-      })
-      .catch(() => {
-        const canvas = document.getElementById('volumeChart');
-        if (canvas) canvas.remove();
-        const loading = document.getElementById('loading');
-        if (loading) loading.textContent = 'Failed to load data';
       });
-  })();
+      new Chart(document.getElementById('priceChart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: pricePoints.map(p => p.time),
+          datasets: [{
+            label: 'Price (USD)',
+            data: pricePoints.map(p => p.value),
+            borderColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            fill: false,
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { maxTicksLimit: 15 } },
+            y: { beginAtZero: false }
+          }
+        }
+      });
+    })
+    .catch(() => {
+      document.getElementById('volumeChart').style.display = 'none';
+      document.getElementById('priceChart').style.display = 'none';
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+    });
+})();
 </script>
 </body>
 </html>
