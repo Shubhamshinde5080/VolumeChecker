@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitcoin Volume Chart</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    text-align: center;
+  }
+  #volumeChart {
+    max-width: 800px;
+    width: 100%;
+    height: 400px;
+    margin: auto;
+  }
+  #loading {
+    font-size: 1.2em;
+    margin-top: 20px;
+  }
+  @media (max-width: 600px) {
+    #volumeChart {
+      height: 300px;
+    }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<h1>Bitcoin Volume (Last 24h)</h1>
+<canvas id="volumeChart"></canvas>
+<div id="loading">Loading…</div>
+<script>
+  (function() {
+    const now = Math.floor(Date.now() / 1000);
+    const start = now - 24 * 3600;
+    const url = `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range?vs_currency=usd&from=${start}&to=${now}`;
+
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        const volumes = data.total_volumes || [];
+        const points = [];
+        let last = 0;
+        for (const [ts, vol] of volumes) {
+          if (ts - last >= 900000) {
+            const time = new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            points.push({ time, vol });
+            last = ts;
+          }
+        }
+        document.getElementById('loading').style.display = 'none';
+        new Chart(document.getElementById('volumeChart'), {
+          type: 'bar',
+          data: {
+            labels: points.map(p => p.time),
+            datasets: [{
+              label: 'Volume',
+              data: points.map(p => p.vol),
+              backgroundColor: 'rgba(75, 192, 192, 0.5)'
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: { ticks: { maxTicksLimit: 15 } },
+              y: { beginAtZero: true }
+            }
+          }
+        });
+      })
+      .catch(() => {
+        const canvas = document.getElementById('volumeChart');
+        if (canvas) canvas.remove();
+        const loading = document.getElementById('loading');
+        if (loading) loading.textContent = 'Failed to load data';
+      });
+  })();
+</script>
+</body>
+</html>
